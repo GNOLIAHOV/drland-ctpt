@@ -1,0 +1,183 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────── Enums ─────────────
+
+enum PropertyType {
+  ROOM // Phòng trọ
+  COMMERCIAL_SPACE // Mặt bằng kinh doanh
+}
+
+enum PropertyStatus {
+  AVAILABLE // Đang trống
+  SOON_TO_BE_AVAILABLE // Sắp trống
+  DEPOSITED // Đã đặt cọc
+  RENTED // Đang cho thuê
+}
+
+enum BillingStatus {
+  UNPAID
+  PAID
+}
+
+enum BookingStatus {
+  PENDING // Mới nhận từ AI Agent
+  CONTACTED // Admin đã liên hệ
+  CONFIRMED // Đã chốt
+  REJECTED // Từ chối
+  CANCELLED // Khách hủy
+}
+
+// ───────────── Models ─────────────
+
+model Admin {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  fullName     String   @map("full_name")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("admins")
+}
+
+model House {
+  id                     String     @id @default(uuid()) @db.Uuid
+  code                   String     @unique
+  name                   String
+  address                String
+  defaultElectricityRate Decimal    @default(3800) @map("default_electricity_rate") @db.Decimal(12, 2)
+  defaultWaterRate       Decimal    @default(100000) @map("default_water_rate") @db.Decimal(12, 2)
+  defaultServiceFee      Decimal    @default(50000) @map("default_service_fee") @db.Decimal(12, 2)
+  description            String?    @db.Text
+  createdAt              DateTime   @default(now()) @map("created_at")
+  updatedAt              DateTime   @updatedAt @map("updated_at")
+
+  properties Property[]
+
+  @@map("houses")
+}
+
+model Property {
+  id              String         @id @default(uuid()) @db.Uuid
+  houseId         String?        @map("house_id") @db.Uuid
+  code            String         @unique // Mã phòng, vd: P101, MB01
+  name            String
+  type            PropertyType   @default(ROOM)
+  address         String
+  area            Decimal        @db.Decimal(8, 2) // m²
+  monthlyRent     Decimal        @map("monthly_rent") @db.Decimal(14, 2)
+  deposit         Decimal?       @db.Decimal(14, 2)
+  electricityRate Decimal        @map("electricity_rate") @db.Decimal(10, 2) // đ/kWh
+  waterRate       Decimal        @map("water_rate") @db.Decimal(10, 2) // đ/m³
+  serviceFee      Decimal        @default(0) @map("service_fee") @db.Decimal(14, 2)
+  status          PropertyStatus @default(AVAILABLE)
+  availableFrom   DateTime?      @map("available_from") @db.Date // Dùng khi SOON_TO_BE_AVAILABLE
+  description     String?
+  images          String[]       @default([])
+
+  // Thông tin khách thuê / khách đặt cọc
+  tenantName      String?        @map("tenant_name")
+  tenantPhone     String?        @map("tenant_phone")
+  tenantCitizenId String?        @map("tenant_citizen_id")
+  leaseStartDate  DateTime?      @map("lease_start_date") @db.Date
+  leaseEndDate    DateTime?      @map("lease_end_date") @db.Date
+  depositPaid     Decimal?       @map("deposit_paid") @db.Decimal(14, 2)
+  tenantCount     Int?           @default(1) @map("tenant_count")
+  vehicleCount    Int?           @default(0) @map("vehicle_count")
+  rentalNotes     String?        @map("rental_notes")
+
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  house           House?           @relation(fields: [houseId], references: [id], onDelete: Restrict)
+  billings        Billing[]
+  bookingRequests BookingRequest[]
+
+  @@index([houseId])
+  @@index([status])
+  @@index([type, status])
+  @@map("properties")
+}
+
+model Billing {
+  id          String @id @default(uuid()) @db.Uuid
+  propertyId  String @map("property_id") @db.Uuid
+  periodMonth Int    @map("period_month") // 1-12
+  periodYear  Int    @map("period_year")
+
+  electricityStart Int @map("electricity_start") // Chỉ số điện đầu kỳ
+  electricityEnd   Int @map("electricity_end") // Chỉ số điện cuối kỳ
+  waterStart       Int @map("water_start")
+  waterEnd         Int @map("water_end")
+
+  // Snapshot đơn giá tại thời điểm lập hóa đơn (không bị ảnh hưởng khi đổi giá phòng)
+  electricityRate Decimal @map("electricity_rate") @db.Decimal(10, 2)
+  waterRate       Decimal @map("water_rate") @db.Decimal(10, 2)
+
+  rentAmount        Decimal @map("rent_amount") @db.Decimal(14, 2)
+  electricityAmount Decimal @map("electricity_amount") @db.Decimal(14, 2)
+  waterAmount       Decimal @map("water_amount") @db.Decimal(14, 2)
+  serviceFee        Decimal @default(0) @map("service_fee") @db.Decimal(14, 2)
+  adjustmentAmount  Decimal @default(0) @map("adjustment_amount") @db.Decimal(14, 2)
+  adjustmentNote    String? @map("adjustment_note")
+  totalAmount       Decimal @map("total_amount") @db.Decimal(14, 2)
+
+  status    BillingStatus @default(UNPAID)
+  paidAt    DateTime?     @map("paid_at")
+  note      String?
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+
+  @@unique([propertyId, periodYear, periodMonth]) // Mỗi phòng 1 hóa đơn / tháng
+  @@index([status])
+  @@map("billings")
+}
+
+model BookingRequest {
+  id            String        @id @default(uuid()) @db.Uuid
+  propertyId    String        @map("property_id") @db.Uuid
+  customerName  String        @map("customer_name")
+  customerPhone String        @map("customer_phone")
+  customerEmail String?       @map("customer_email")
+  desiredMoveIn DateTime?     @map("desired_move_in") @db.Date
+  message       String?
+  source        String        @default("AI_AGENT")
+  status        BookingStatus @default(PENDING)
+  notifiedAt    DateTime?     @map("notified_at") // Thời điểm đã gửi email (Task 7)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+
+  @@index([propertyId])
+  @@index([status, createdAt])
+  @@map("booking_requests")
+}
+
+model SystemSetting {
+  id            String   @id @default("default")
+  brandName     String   @default("DRLAND") @map("brand_name")
+  hotline       String   @default("0943.257.089")
+  zaloPhone     String   @default("0943257089") @map("zalo_phone")
+  viewingHours  String   @default("08:00 - 20:30 (Mỗi ngày)") @map("viewing_hours")
+  bankCode      String   @default("971101") @map("bank_code")
+  bankSlug      String   @default("zalopay") @map("bank_slug")
+  bankName      String   @default("Ví điện tử ZaloPay") @map("bank_name")
+  accountNumber String   @default("0943257089") @map("account_number")
+  accountName   String   @default("VO HAI LONG") @map("account_name")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}

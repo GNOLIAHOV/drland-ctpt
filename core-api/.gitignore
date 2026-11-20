@@ -1,0 +1,14 @@
+node_modules
+dist
+coverage
+
+# Keep environment variables out of version control
+.env
+
+# Generated Prisma Client
+/src/generated/prisma
+
+# User uploads (preserve directory structure)
+/uploads/*
+!/uploads/**/.gitkeep
+

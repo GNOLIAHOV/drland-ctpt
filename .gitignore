@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+**/dist/
+build/
+
+# Python virtual environment & cache
+venv/
+**/venv/
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+**/.env
+.env.local
+.env.*.local
+
+# OS & IDE files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+
+# Backups, temporary binaries & build cache
+backups/
+tools/
+*.tsbuildinfo
+
+# Local agent skills & Word documents / lock files
+.agents/
+docs/*.docx
+~$*

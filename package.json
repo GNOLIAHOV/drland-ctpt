@@ -1,0 +1,25 @@
+{
+  "name": "ctpt",
+  "version": "1.0.0",
+  "description": "Giải pháp phần mềm Quản lý Bất động sản, Phòng trọ & Mặt bằng Cho thuê tích hợp **Trợ lý AI (Google Gemini + LangChain)** hỗ trợ tự động tư vấn phòng trống và đặt lịch hẹn xem phòng 24/7.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "start:docker": "docker compose up -d",
+    "db:backup": "powershell -ExecutionPolicy Bypass -File ./scripts/backup-db.ps1",
+    "start:core": "cd core-api && npm run start:dev",
+    "start:admin": "cd admin-dashboard && npm run dev",
+    "start:client": "cd client-chat-ui && npm run dev",
+    "start:ai": "cd ai-booking-agent && .\\venv\\Scripts\\python -m uvicorn app.main:app --reload --port 8000",
+    "dev": "npm run start:docker && concurrently \"npm run start:core\" \"npm run start:ai\" \"npm run start:admin\" \"npm run start:client\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "concurrently": "^10.0.6"
+  }
+}

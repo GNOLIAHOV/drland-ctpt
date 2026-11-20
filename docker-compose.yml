@@ -1,0 +1,105 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: core-api-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-core_api}
+    ports:
+      # Host port defaults to 5433 to avoid clashing with other local Postgres instances on 5432
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - property-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-core_api}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  core-api:
+    build:
+      context: ./core-api
+      dockerfile: Dockerfile
+    container_name: drland-core-api
+    restart: unless-stopped
+    profiles: ["prod"]
+    env_file:
+      - ./core-api/.env
+    environment:
+      PORT: 3001
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-core_api}?schema=public
+    ports:
+      - "${CORE_API_PORT:-3001}:3001"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - property-network
+
+  ai-booking-agent:
+    build:
+      context: ./ai-booking-agent
+      dockerfile: Dockerfile
+    container_name: drland-ai-agent
+    restart: unless-stopped
+    profiles: ["prod"]
+    env_file:
+      - ./ai-booking-agent/.env
+    environment:
+      PORT: 8000
+      CORE_API_BASE_URL: http://core-api:3001
+    ports:
+      - "${AI_AGENT_PORT:-8000}:8000"
+    depends_on:
+      - core-api
+    networks:
+      - property-network
+
+  admin-dashboard:
+    build:
+      context: ./admin-dashboard
+      dockerfile: Dockerfile
+      args:
+        VITE_CORE_API_URL: ${PUBLIC_CORE_API_URL:-http://localhost:3001}
+        VITE_CLIENT_URL: ${PUBLIC_CLIENT_URL:-http://localhost:5174/}
+    container_name: drland-admin-ui
+    restart: unless-stopped
+    profiles: ["prod"]
+    ports:
+      - "${ADMIN_UI_PORT:-5173}:80"
+    depends_on:
+      - core-api
+    networks:
+      - property-network
+
+  client-chat-ui:
+    build:
+      context: ./client-chat-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_CORE_API_URL: ${PUBLIC_CORE_API_URL:-http://localhost:3001}
+        VITE_AI_AGENT_URL: ${PUBLIC_AI_AGENT_URL:-http://localhost:8000}
+    container_name: drland-client-ui
+    restart: unless-stopped
+    profiles: ["prod"]
+    ports:
+      - "${CLIENT_UI_PORT:-5174}:80"
+    depends_on:
+      - core-api
+      - ai-booking-agent
+    networks:
+      - property-network
+
+volumes:
+  postgres_data:
+  uploads_data:
+
+networks:
+  property-network:
+    driver: bridge
